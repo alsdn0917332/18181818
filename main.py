@@ -1,13 +1,13 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="KBO 3D 리얼 프로야구", page_icon="⚾", layout="wide")
+st.set_page_config(page_title="KBO 3D 리얼 야구장", page_icon="⚾", layout="wide")
 
 st.sidebar.header("⚙️ 경기 & 투구 설정")
 pitch_type = st.sidebar.selectbox("구종 선택", ["직구 (Fastball)", "슬라이더 (Slider)", "커브 (Curveball)", "포크볼 (Forkball)"])
 pitch_speed = st.sidebar.slider("구속 설정 (km/h)", 130, 165, 150)
 
-st.title("⚾ 3D KBO 모바일 스타일 리얼 야구 게임")
+st.title("⚾ 3D KBO 야간 경기장 실전 시뮬레이터")
 
 html_code = f"""
 <!DOCTYPE html>
@@ -16,7 +16,7 @@ html_code = f"""
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {{ margin: 0; overflow: hidden; background: #000; font-family: 'Malgun Gothic', sans-serif; user-select: none; }}
-        #game-container {{ width: 100vw; height: 720px; position: relative; background: #050b14; }}
+        #game-container {{ width: 100vw; height: 750px; position: relative; background: #030712; }}
 
         /* 1. 스코어보드 UI */
         .scoreboard {{
@@ -27,27 +27,18 @@ html_code = f"""
         .team-score {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }}
         .team-flag {{ padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }}
         .kia {{ background: #ea1d2c; color: white; }}
-        .nexen {{ background: #820024; color: #eaa000; }}
+        .samsung {{ background: #0066b2; color: white; }}
         .inning-tag {{ background: #1e293b; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 6px; }}
 
-        /* 2. 좌/우 선수 프로필 카드 */
-        .player-card {{
-            position: absolute; top: 110px; width: 160px;
-            background: linear-gradient(180deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.95) 100%);
-            border: 2px solid #64748b; border-radius: 10px; color: white; padding: 8px; z-index: 10;
+        /* 2. 전체화면 버튼 */
+        #fullscreen-btn {{
+            position: absolute; top: 15px; right: 15px; padding: 10px 18px;
+            background: rgba(30, 41, 59, 0.9); color: #fff; border: 1px solid #64748b;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; z-index: 10;
         }}
-        .card-left {{ left: 15px; border-color: #ea1d2c; }}
-        .card-right {{ right: 15px; border-color: #820024; }}
-        .card-header {{ display: flex; justify-content: space-between; font-size: 11px; color: #fbbf24; font-weight: bold; margin-bottom: 4px; }}
-        .card-img-placeholder {{
-            width: 100%; height: 100px; background: #334155; border-radius: 6px; margin-bottom: 6px;
-            display: flex; align-items: center; justify-content: center; font-size: 32px;
-        }}
-        .player-name {{ font-size: 13px; font-weight: bold; text-align: center; border-bottom: 1px solid #475569; padding-bottom: 4px; margin-bottom: 6px; }}
-        .stat-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2px; font-size: 10px; text-align: center; color: #cbd5e1; }}
-        .stat-val {{ font-weight: bold; color: #fff; font-size: 11px; }}
+        #fullscreen-btn:hover {{ background: #3b82f6; }}
 
-        /* 3. 하단 상세 전광판 */
+        /* 3. 하단 세부 정보 UI */
         .bottom-bar {{
             position: absolute; bottom: 15px; left: 15px; right: 15px;
             display: flex; justify-content: space-between; gap: 10px; z-index: 10;
@@ -59,11 +50,11 @@ html_code = f"""
 
         /* 4. 카운트다운 & 타격 결과 */
         #countdown {{
-            position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+            position: absolute; top: 28%; left: 50%; transform: translate(-50%, -50%);
             font-size: 80px; font-weight: 900; color: #facc15; text-shadow: 0 0 30px rgba(0,0,0,0.9); z-index: 20;
         }}
         #hit-result {{
-            position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%);
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
             font-size: 42px; font-weight: 900; text-shadow: 0 0 20px #000; display: none; z-index: 20;
         }}
         #pitch-btn {{
@@ -77,45 +68,23 @@ html_code = f"""
 </head>
 <body>
     <div id="game-container">
-        <!-- UI 파트 -->
+        <!-- UI 요소 -->
         <div class="scoreboard">
             <div class="inning-tag">1회 초 | B:0 S:0 O:0</div>
             <div class="team-score"><span class="team-flag kia">KIA</span> <span>0</span></div>
-            <div class="team-score"><span class="team-flag nexen">넥센</span> <span>0</span></div>
+            <div class="team-score"><span class="team-flag samsung">삼성</span> <span>0</span></div>
         </div>
 
-        <div class="player-card card-left">
-            <div class="card-header"><span>★1 LIVE</span> <span>RF</span></div>
-            <div class="card-img-placeholder">⚾</div>
-            <div class="player-name">김도영 '24</div>
-            <div class="stat-grid">
-                <div>정확 <span class="stat-val">92</span></div>
-                <div>파워 <span class="stat-val">88</span></div>
-                <div>선구 <span class="stat-val">85</span></div>
-                <div>주력 <span class="stat-val">95</span></div>
-            </div>
-        </div>
-
-        <div class="player-card card-right">
-            <div class="card-header"><span>★1 LIVE</span> <span>SP</span></div>
-            <div class="card-img-placeholder">🧢</div>
-            <div class="player-name">류현진 '24</div>
-            <div class="stat-grid">
-                <div>제구 <span class="stat-val">90</span></div>
-                <div>구위 <span class="stat-val">86</span></div>
-                <div>체력 <span class="stat-val">88</span></div>
-                <div>직구 <span class="stat-val">87</span></div>
-            </div>
-        </div>
+        <button id="fullscreen-btn" onclick="toggleFullScreen()">🖥️ 전체화면</button>
 
         <div class="bottom-bar">
             <div class="bottom-box">
-                <div style="color:#94a3b8; font-weight:bold;">1번 타자 (김도영)</div>
+                <div style="color:#94a3b8; font-weight:bold;">타자 (김도영)</div>
                 <div>타율 .347 | 홈런 38 | 타점 109</div>
             </div>
             <div class="bottom-box">
-                <div style="color:#94a3b8; font-weight:bold;">투수 정보 (류현진)</div>
-                <div>구속 {pitch_speed} km/h | 구종: {pitch_type}</div>
+                <div style="color:#94a3b8; font-weight:bold;">투수 (원태인)</div>
+                <div>구속: {pitch_speed} km/h | 구종: {pitch_type}</div>
             </div>
         </div>
 
@@ -127,85 +96,109 @@ html_code = f"""
     <script>
         const container = document.getElementById('game-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x061121);
+        scene.background = new THREE.Color(0x020617); // 야간 하늘
 
-        // 스크린샷과 동일한 타자 후방 3D 카메라 뷰
+        // --- 카메라 시점: 홈플레이트 & 스트라이크 존 화면 정중앙 배치 ---
         const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-        camera.position.set(-0.7, 1.45, 2.3);
-        camera.lookAt(0, 1.25, -18.44);
+        camera.position.set(0, 1.4, 2.1); // 중앙 구도
+        camera.lookAt(0, 1.2, -18.44);
 
         const renderer = new THREE.WebGLRenderer({{ antialias: true }});
         renderer.setSize(container.clientWidth, container.clientHeight);
         container.appendChild(renderer.domElement);
 
-        // 조명 연출
-        const light = new THREE.DirectionalLight(0xffffff, 1.3);
-        light.position.set(10, 25, 10);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x666666));
+        // --- 야간 경기장 전용 야간 조명 타워 (4개) ---
+        function createLightTower(x, z) {{
+            const tower = new THREE.Group();
+            const poleGeo = new THREE.CylinderGeometry(0.3, 0.5, 20);
+            const poleMat = new THREE.MeshLambertMaterial({{ color: 0x475569 }});
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.y = 10;
+            tower.add(pole);
 
-        // --- 1. 디테일 3D 야구장 인프라 ---
-        // 내야 잔디 & 외야 잔디 패턴
+            // 조명 패널
+            const headGeo = new THREE.BoxGeometry(4, 2.5, 0.5);
+            const headMat = new THREE.MeshBasicMaterial({{ color: 0xffffff }});
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, 20, 0);
+            tower.add(head);
+
+            // 실체 조명 광원
+            const light = new THREE.SpotLight(0xffffff, 1.2);
+            light.position.set(x, 20, z);
+            light.target.position.set(0, 0, -10);
+            scene.add(light);
+
+            tower.position.set(x, 0, z);
+            scene.add(tower);
+        }}
+
+        // 조명 탑 배치 (좌/우 외야, 좌/우 내야)
+        createLightTower(-35, -30);
+        createLightTower(35, -30);
+        createLightTower(-30, 5);
+        createLightTower(30, 5);
+
+        scene.add(new THREE.AmbientLight(0x556677));
+
+        // --- 야구장 인프라 디테일 재현 ---
+        // 1. 잔디 필드
         const fieldGeo = new THREE.PlaneGeometry(120, 120);
-        const fieldMat = new THREE.MeshLambertMaterial({{ color: 0x1e5631 }});
+        const fieldMat = new THREE.MeshLambertMaterial({{ color: 0x15803d }});
         const field = new THREE.Mesh(fieldGeo, fieldMat);
         field.rotation.x = -Math.PI / 2;
         scene.add(field);
 
-        // 흙 다이아몬드 (인필드)
-        const dirtGeo = new THREE.PlaneGeometry(12, 26);
-        const dirtMat = new THREE.MeshLambertMaterial({{ color: 0x8b5a2b }});
+        // 2. 다이아몬드 내야 흙 및 투수 마운드 흙
+        const dirtGeo = new THREE.PlaneGeometry(16, 26);
+        const dirtMat = new THREE.MeshLambertMaterial({{ color: 0x9a3412 }});
         const dirt = new THREE.Mesh(dirtGeo, dirtMat);
         dirt.rotation.x = -Math.PI / 2;
         dirt.position.set(0, 0.01, -11);
         scene.add(dirt);
 
-        // 홈플레이트
-        const hpGeo = new THREE.BoxGeometry(0.4, 0.02, 0.4);
-        const hpMat = new THREE.MeshBasicMaterial({{ color: 0xffffff }});
-        const hp = new THREE.Mesh(hpGeo, hpMat);
-        hp.position.set(0, 0.02, 0);
-        scene.add(hp);
-
-        // 스트라이크 존 박스 프레임
-        const szGeo = new THREE.BoxGeometry(0.5, 0.7, 0.01);
-        const szMat = new THREE.MeshBasicMaterial({{ color: 0x00f5d4, wireframe: true, transparent: true, opacity: 0.5 }});
+        // 3. 중앙 스트라이크 존 박스 (화면 중앙 정렬)
+        const szGeo = new THREE.BoxGeometry(0.52, 0.72, 0.01);
+        const szMat = new THREE.MeshBasicMaterial({{ color: 0x06b6d4, wireframe: true, transparent: true, opacity: 0.6 }});
         const sz = new THREE.Mesh(szGeo, szMat);
         sz.position.set(0, 1.2, -0.4);
         scene.add(sz);
 
-        // 외야 펜스 및 돔구장 벽면
-        const fenceGeo = new THREE.CylinderGeometry(45, 45, 6, 32, 1, true, -Math.PI/2.5, Math.PI/1.25);
-        const fenceMat = new THREE.MeshLambertMaterial({{ color: 0x0f172a, side: THREE.DoubleSide }});
-        const fence = new THREE.Mesh(fenceGeo, fenceMat);
-        fence.position.set(0, 3, -20);
+        // 4. 홈플레이트
+        const hp = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.02, 0.43), new THREE.MeshBasicMaterial({{ color: 0xffffff }}));
+        hp.position.set(0, 0.02, 0);
+        scene.add(hp);
+
+        // 5. 외야 펜스 및 전광판
+        const fence = new THREE.Mesh(
+            new THREE.CylinderGeometry(45, 45, 5, 32, 1, true, -Math.PI/2.5, Math.PI/1.25),
+            new THREE.MeshLambertMaterial({{ color: 0x0f172a, side: THREE.DoubleSide }})
+        );
+        fence.position.set(0, 2.5, -20);
         scene.add(fence);
 
-        // 중앙 고척 스카이돔 스타일 대형 전광판
-        const boardGeo = new THREE.BoxGeometry(20, 8, 0.5);
-        const boardMat = new THREE.MeshLambertMaterial({{ color: 0x020617 }});
-        const board = new THREE.Mesh(boardGeo, boardMat);
+        const board = new THREE.Mesh(
+            new THREE.BoxGeometry(22, 9, 0.5),
+            new THREE.MeshLambertMaterial({{ color: 0x020617 }})
+        );
         board.position.set(0, 14, -38);
         scene.add(board);
 
-        // --- 2. 사람 형태 3D 캐릭터 생성 함수 (투수 & 타자) ---
+        // --- 사람 형태 3D 캐릭터 생성 ---
         function createHumanCharacter(jerseyColor, pantsColor) {{
             const group = new THREE.Group();
             const matJersey = new THREE.MeshLambertMaterial({{ color: jerseyColor }});
             const matPants = new THREE.MeshLambertMaterial({{ color: pantsColor }});
             const matSkin = new THREE.MeshLambertMaterial({{ color: 0xffdbac }});
 
-            // 머리
             const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), matSkin);
             head.position.y = 1.45;
             group.add(head);
 
-            // 상체 (유니폼)
             const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.55), matJersey);
             torso.position.y = 1.05;
             group.add(torso);
 
-            // 팔 (오른팔/왼팔)
             const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45), matJersey);
             armR.position.set(-0.22, 1.1, 0);
             group.add(armR);
@@ -214,7 +207,6 @@ html_code = f"""
             armL.position.set(0.22, 1.1, 0);
             group.add(armL);
 
-            // 하체 (바지)
             const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.6), matPants);
             legR.position.set(-0.1, 0.4, 0);
             group.add(legR);
@@ -223,27 +215,28 @@ html_code = f"""
             legL.position.set(0.1, 0.4, 0);
             group.add(legL);
 
-            return {{ group, armR, armL, torso }};
+            return {{ group, armR, armL }};
         }}
 
         const PITCHER_Z = -18.44;
 
-        // 투수 생성 (버건디 유니폼, 마운드 위치)
-        const pitcherChar = createHumanCharacter(0x820024, 0xffffff);
+        // 투수 (삼성 유니폼)
+        const pitcherChar = createHumanCharacter(0x0066b2, 0xffffff);
         pitcherChar.group.position.set(0, 0, PITCHER_Z);
         scene.add(pitcherChar.group);
 
-        // 타자 생성 (레드 유니폼, 우타석 위치)
+        // 타자 (KIA 유니폼, 스트라이크존 우측 중앙 정렬)
         const batterChar = createHumanCharacter(0xea1d2c, 0xffffff);
-        batterChar.group.position.set(0.6, 0, -0.2);
+        batterChar.group.position.set(0.5, 0, -0.2);
         batterChar.group.rotation.y = -Math.PI / 6;
         scene.add(batterChar.group);
 
-        // 3D 배트 (타자 팔에 연결)
-        const batGeo = new THREE.CylinderGeometry(0.025, 0.012, 0.95);
-        const batMat = new THREE.MeshLambertMaterial({{ color: 0x111111 }});
-        const bat = new THREE.Mesh(batGeo, batMat);
-        bat.position.set(0.55, 1.25, -0.05);
+        // 배트
+        const bat = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.025, 0.012, 0.95),
+            new THREE.MeshLambertMaterial({{ color: 0x111111 }})
+        );
+        bat.position.set(0.48, 1.25, -0.05);
         bat.rotation.z = -Math.PI / 3.5;
         scene.add(bat);
 
@@ -252,12 +245,11 @@ html_code = f"""
         ball.position.set(0, 1.5, PITCHER_Z);
         scene.add(ball);
 
-        // --- 3. 변수 및 애니메이션 로직 ---
+        // --- 변수 및 로직 ---
         let isWaiting = false;
         let isWindup = false;
         let isPitching = false;
         let isHitBallMoving = false;
-        
         let countdownVal = 5;
         let pitchStartTime = 0;
         let windupStartTime = 0;
@@ -265,10 +257,7 @@ html_code = f"""
 
         const pitchSpeedVal = {pitch_speed};
         const flightTime = (18.44 / (pitchSpeedVal * 1000 / 3600)) * 1000;
-
-        // 타구 물리학 변수
         let ballVel = new THREE.Vector3();
-        let ballGravity = -9.8;
 
         function startPitchSequence() {{
             if (isWaiting || isWindup || isPitching || isHitBallMoving) return;
@@ -284,7 +273,7 @@ html_code = f"""
 
             ball.position.set(0, 1.5, PITCHER_Z);
             bat.rotation.y = 0;
-            bat.position.set(0.55, 1.25, -0.05);
+            bat.position.set(0.48, 1.25, -0.05);
 
             const timer = setInterval(() => {{
                 countdownVal--;
@@ -294,7 +283,6 @@ html_code = f"""
                     clearInterval(timer);
                     document.getElementById('countdown').innerText = "WINDUP!";
                     
-                    // 와인드업 동작 후 투구
                     isWaiting = false;
                     isWindup = true;
                     windupStartTime = Date.now();
@@ -302,14 +290,12 @@ html_code = f"""
             }}, 1000);
         }}
 
-        // 스페이스바 부드러운 스윙 & 타구 궤적 제어
+        // 스페이스바 타격
         window.addEventListener('keydown', (e) => {{
             if (e.code === 'Space' && (isPitching || isWindup) && !hasSwung) {{
                 hasSwung = true;
-                
-                // 배트 및 타자 상체 스윙 회전
                 bat.rotation.y = -Math.PI / 1.1;
-                bat.position.x = 0.2;
+                bat.position.x = 0.15;
 
                 if (isPitching) {{
                     const elapsed = Date.now() - pitchStartTime;
@@ -320,20 +306,20 @@ html_code = f"""
 
                     if (diff < 40) {{
                         showResult("💥 대형 홈런!! (HOMERUN)", "#facc15");
-                        ballVel.set(0, 18, -35); // 높고 멀리 날아가는 궤적
+                        ballVel.set(0, 18, -35);
                     }} else if (diff < 90) {{
                         showResult("⚾ 안타! (HIT)", "#4ade80");
-                        ballVel.set((Math.random() - 0.5) * 15, 8, -25); // 안타 궤적
+                        ballVel.set((Math.random() - 0.5) * 15, 8, -25);
                     }} else if (diff < 150) {{
                         showResult("💨 파울! (FOUL)", "#fbbf24");
-                        ballVel.set(15, 10, -5); // 측면 파울 궤적
+                        ballVel.set(15, 10, -5);
                     }} else {{
                         showResult("❌ 헛스윙 삼진!", "#f87171");
                         isHitBallMoving = false;
                         document.getElementById('pitch-btn').disabled = false;
                     }}
                 }} else {{
-                    showResult("💨 너무 빠른 타이밍! (헛스윙)", "#f87171");
+                    showResult("💨 너무 빠른 타이밍!", "#f87171");
                 }}
             }}
         }});
@@ -345,15 +331,24 @@ html_code = f"""
             el.style.display = 'block';
         }}
 
-        // --- 4. 렌더링 애니메이션 루프 ---
+        // 전체화면 토글
+        function toggleFullScreen() {{
+            const elem = document.getElementById('game-container');
+            if (!document.fullscreenElement) {{
+                elem.requestFullscreen().catch(err => alert(err.message));
+            }} else {{
+                document.exitFullscreen();
+            }}
+        }}
+
+        // 애니메이션 루프
         function animate() {{
             requestAnimationFrame(animate);
 
-            // 1. 투수 와인드업 애니메이션 (0.6초)
             if (isWindup) {{
                 const elapsed = Date.now() - windupStartTime;
                 if (elapsed < 600) {{
-                    pitcherChar.armR.rotation.x = -Math.PI * (elapsed / 600); // 오른팔 뒤로 올림
+                    pitcherChar.armR.rotation.x = -Math.PI * (elapsed / 600);
                 }} else {{
                     isWindup = false;
                     isPitching = true;
@@ -363,7 +358,6 @@ html_code = f"""
                 }}
             }}
 
-            // 2. 공 투구 이동 애니메이션
             if (isPitching) {{
                 const elapsed = Date.now() - pitchStartTime;
                 const progress = elapsed / flightTime;
@@ -377,16 +371,13 @@ html_code = f"""
                 }}
             }}
 
-            // 3. 타격 후 공의 포물선 비행 애니메이션
             if (isHitBallMoving) {{
-                const dt = 0.016; // 프레임당 시간
+                const dt = 0.016;
                 ball.position.x += ballVel.x * dt;
                 ball.position.y += ballVel.y * dt;
                 ball.position.z += ballVel.z * dt;
+                ballVel.y += -9.8 * dt;
 
-                ballVel.y += ballGravity * dt; // 중력 적용
-
-                // 땅에 부딪히거나 외야에 도착 시 정지
                 if (ball.position.y <= 0.1) {{
                     ball.position.y = 0.1;
                     isHitBallMoving = false;
@@ -403,4 +394,4 @@ html_code = f"""
 </html>
 """
 
-components.html(html_code, height=750)
+components.html(html_code, height=780)
