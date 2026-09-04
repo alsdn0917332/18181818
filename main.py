@@ -4,8 +4,14 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="KBO 3D 리얼 야구장", page_icon="⚾", layout="wide")
 
 st.sidebar.header("⚙️ 경기 & 투구 설정")
-pitch_type = st.sidebar.selectbox("구종 선택", ["직구 (Fastball)", "슬라이더 (Slider)", "커브 (Curveball)", "포크볼 (Forkball)"])
-pitch_speed = st.sidebar.slider("구속 설정 (km/h)", 130, 165, 150)
+pitch_type = st.sidebar.selectbox("구종 선택", [
+    "직구 (Four-Seam)", 
+    "슬라이더 (Slider)", 
+    "커브 (Curveball)", 
+    "포크볼 (Forkball)",
+    "체인지업 (Changeup)"
+])
+pitch_speed = st.sidebar.slider("구속 설정 (km/h)", 120, 165, 150)
 
 st.title("⚾ 3D KBO 야간 경기장 실전 시뮬레이터")
 
@@ -16,7 +22,7 @@ html_code = f"""
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {{ margin: 0; overflow: hidden; background: #000; font-family: 'Malgun Gothic', sans-serif; user-select: none; }}
-        #game-container {{ width: 100vw; height: 750px; position: relative; background: #030712; }}
+        #game-container {{ width: 100vw; height: 750px; position: relative; background: #020617; }}
 
         /* 1. 스코어보드 UI */
         .scoreboard {{
@@ -86,11 +92,15 @@ html_code = f"""
                 <div style="color:#94a3b8; font-weight:bold;">투수 (원태인)</div>
                 <div>구속: {pitch_speed} km/h | 구종: {pitch_type}</div>
             </div>
+            <div class="bottom-box" style="text-align:right;">
+                <div style="color:#facc15; font-weight:bold;">🎮 조작 안내</div>
+                <div>[1키]: 투구 준비 | [스페이스바]: 타격</div>
+            </div>
         </div>
 
         <div id="countdown"></div>
         <div id="hit-result"></div>
-        <button id="pitch-btn" onclick="startPitchSequence()">🔥 투구 시작 (5초 대기)</button>
+        <button id="pitch-btn" onclick="startPitchSequence()">🔥 투구 시작 ('1' 키 누름 / 5초 대기)</button>
     </div>
 
     <script>
@@ -100,32 +110,35 @@ html_code = f"""
 
         // --- 카메라 시점: 홈플레이트 & 스트라이크 존 화면 정중앙 배치 ---
         const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-        camera.position.set(0, 1.4, 2.1); // 중앙 구도
+        camera.position.set(0, 1.4, 2.1);
         camera.lookAt(0, 1.2, -18.44);
 
         const renderer = new THREE.WebGLRenderer({{ antialias: true }});
         renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
         container.appendChild(renderer.domElement);
 
-        // --- 야간 경기장 전용 야간 조명 타워 (4개) ---
+        // --- 야간 경기장 조명 타워 (4개) ---
         function createLightTower(x, z) {{
             const tower = new THREE.Group();
-            const poleGeo = new THREE.CylinderGeometry(0.3, 0.5, 20);
-            const poleMat = new THREE.MeshLambertMaterial({{ color: 0x475569 }});
+            
+            // 철골 구조 트러스 느낌
+            const poleGeo = new THREE.CylinderGeometry(0.3, 0.6, 22, 8);
+            const poleMat = new THREE.MeshLambertMaterial({{ color: 0x334155 }});
             const pole = new THREE.Mesh(poleGeo, poleMat);
-            pole.position.y = 10;
+            pole.position.y = 11;
             tower.add(pole);
 
-            // 조명 패널
-            const headGeo = new THREE.BoxGeometry(4, 2.5, 0.5);
-            const headMat = new THREE.MeshBasicMaterial({{ color: 0xffffff }});
+            // 조명 패널 프레임
+            const headGeo = new THREE.BoxGeometry(5, 3, 0.6);
+            const headMat = new THREE.MeshBasicMaterial({{ color: 0xf8fafc }});
             const head = new THREE.Mesh(headGeo, headMat);
-            head.position.set(0, 20, 0);
+            head.position.set(0, 22, 0);
             tower.add(head);
 
-            // 실체 조명 광원
-            const light = new THREE.SpotLight(0xffffff, 1.2);
-            light.position.set(x, 20, z);
+            // 실제 광원
+            const light = new THREE.SpotLight(0xffffff, 1.4);
+            light.position.set(x, 22, z);
             light.target.position.set(0, 0, -10);
             scene.add(light);
 
@@ -133,72 +146,150 @@ html_code = f"""
             scene.add(tower);
         }}
 
-        // 조명 탑 배치 (좌/우 외야, 좌/우 내야)
         createLightTower(-35, -30);
         createLightTower(35, -30);
         createLightTower(-30, 5);
         createLightTower(30, 5);
 
-        scene.add(new THREE.AmbientLight(0x556677));
+        scene.add(new THREE.AmbientLight(0x475569));
 
-        // --- 야구장 인프라 디테일 재현 ---
-        // 1. 잔디 필드
-        const fieldGeo = new THREE.PlaneGeometry(120, 120);
+        // --- 발전된 리얼 야구장 구조물 ---
+        // 1. 메인 잔디 필드 (스트라이프 패턴 구현)
+        const fieldGeo = new THREE.PlaneGeometry(120, 120, 20, 20);
         const fieldMat = new THREE.MeshLambertMaterial({{ color: 0x15803d }});
         const field = new THREE.Mesh(fieldGeo, fieldMat);
         field.rotation.x = -Math.PI / 2;
         scene.add(field);
 
-        // 2. 다이아몬드 내야 흙 및 투수 마운드 흙
-        const dirtGeo = new THREE.PlaneGeometry(16, 26);
+        // 잔디 줄무늬 패치 추가
+        for(let i = -50; i < 50; i += 8) {{
+            const stripeGeo = new THREE.PlaneGeometry(120, 4);
+            const stripeMat = new THREE.MeshLambertMaterial({{ color: 0x166534, transparent: true, opacity: 0.3 }});
+            const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+            stripe.rotation.x = -Math.PI / 2;
+            stripe.position.set(0, 0.005, i);
+            scene.add(stripe);
+        }}
+
+        // 2. 다이아몬드 내야 흙 및 워닝 트랙
+        const dirtGeo = new THREE.PlaneGeometry(18, 28);
         const dirtMat = new THREE.MeshLambertMaterial({{ color: 0x9a3412 }});
         const dirt = new THREE.Mesh(dirtGeo, dirtMat);
         dirt.rotation.x = -Math.PI / 2;
         dirt.position.set(0, 0.01, -11);
         scene.add(dirt);
 
-        // 3. 중앙 스트라이크 존 박스 (화면 중앙 정렬)
+        // 3. 중앙 스트라이크 존 박스
         const szGeo = new THREE.BoxGeometry(0.52, 0.72, 0.01);
         const szMat = new THREE.MeshBasicMaterial({{ color: 0x06b6d4, wireframe: true, transparent: true, opacity: 0.6 }});
         const sz = new THREE.Mesh(szGeo, szMat);
         sz.position.set(0, 1.2, -0.4);
         scene.add(sz);
 
-        // 4. 홈플레이트
+        // 4. 홈플레이트 & 타자석 라인
         const hp = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.02, 0.43), new THREE.MeshBasicMaterial({{ color: 0xffffff }}));
         hp.position.set(0, 0.02, 0);
         scene.add(hp);
 
-        // 5. 외야 펜스 및 전광판
-        const fence = new THREE.Mesh(
-            new THREE.CylinderGeometry(45, 45, 5, 32, 1, true, -Math.PI/2.5, Math.PI/1.25),
-            new THREE.MeshLambertMaterial({{ color: 0x0f172a, side: THREE.DoubleSide }})
-        );
+        // 타석 분크 라인 (좌/우 타석)
+        const boxLineGeo = new THREE.BoxGeometry(0.8, 0.01, 1.8);
+        const lineMat = new THREE.MeshBasicMaterial({{ color: 0xffffff, transparent: true, opacity: 0.8 }});
+        
+        const rBox = new THREE.Mesh(boxLineGeo, lineMat);
+        rBox.position.set(0.65, 0.015, -0.2);
+        scene.add(rBox);
+
+        const lBox = new THREE.Mesh(boxLineGeo, lineMat);
+        lBox.position.set(-0.65, 0.015, -0.2);
+        scene.add(lBox);
+
+        // 5. 외야 펜스 & 광고판 패널 & 관중석 구조
+        const fenceGeo = new THREE.CylinderGeometry(45, 45, 5, 32, 1, true, -Math.PI/2.5, Math.PI/1.25);
+        const fenceMat = new THREE.MeshLambertMaterial({{ color: 0x0f172a, side: THREE.DoubleSide }});
+        const fence = new THREE.Mesh(fenceGeo, fenceMat);
         fence.position.set(0, 2.5, -20);
         scene.add(fence);
 
+        // 광고 띠 패널
+        const adPanelGeo = new THREE.CylinderGeometry(44.8, 44.8, 1.2, 32, 1, true, -Math.PI/2.5, Math.PI/1.25);
+        const adPanelMat = new THREE.MeshBasicMaterial({{ color: 0x1e3a8a, side: THREE.DoubleSide }});
+        const adPanel = new THREE.Mesh(adPanelGeo, adPanelMat);
+        adPanel.position.set(0, 3, -20);
+        scene.add(adPanel);
+
+        // 관중석 3단계 스탠드
+        for(let s = 1; s <= 3; s++) {{
+            const standGeo = new THREE.CylinderGeometry(45 + s*6, 45 + s*6, 3, 32, 1, true, -Math.PI/2.3, Math.PI/1.15);
+            const standMat = new THREE.MeshLambertMaterial({{ color: 0x334155, side: THREE.DoubleSide }});
+            const stand = new THREE.Mesh(standGeo, standMat);
+            stand.position.set(0, 3 + s*3, -20);
+            scene.add(stand);
+        }}
+
+        // 대형 전광판
         const board = new THREE.Mesh(
-            new THREE.BoxGeometry(22, 9, 0.5),
+            new THREE.BoxGeometry(24, 10, 0.5),
             new THREE.MeshLambertMaterial({{ color: 0x020617 }})
         );
-        board.position.set(0, 14, -38);
+        board.position.set(0, 15, -38);
         scene.add(board);
 
-        // --- 사람 형태 3D 캐릭터 생성 ---
-        function createHumanCharacter(jerseyColor, pantsColor) {{
+        // 전광판 화면 (LED 표현)
+        const boardScreen = new THREE.Mesh(
+            new THREE.PlaneGeometry(22, 8.5),
+            new THREE.MeshBasicMaterial({{ color: 0x1e293b }})
+        );
+        boardScreen.position.set(0, 15, -37.7);
+        scene.add(boardScreen);
+
+
+        // --- 디테일 3D 사람 캐릭터 (얼굴 디테일, 헬멧/모자, 글러브 구현) ---
+        function createRealisticHuman(jerseyColor, pantsColor, isBatter) {{
             const group = new THREE.Group();
             const matJersey = new THREE.MeshLambertMaterial({{ color: jerseyColor }});
             const matPants = new THREE.MeshLambertMaterial({{ color: pantsColor }});
-            const matSkin = new THREE.MeshLambertMaterial({{ color: 0xffdbac }});
+            const matSkin = new THREE.MeshLambertMaterial({{ color: 0xfd3d1d }}); // 피부톤
+            const matDark = new THREE.MeshBasicMaterial({{ color: 0x111111 }});
 
+            // 1. 머리 & 리얼한 얼굴 디테일
             const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), matSkin);
             head.position.y = 1.45;
             group.add(head);
 
+            // 눈
+            const eyeGeo = new THREE.SphereGeometry(0.02, 8, 8);
+            const eyeL = new THREE.Mesh(eyeGeo, matDark);
+            eyeL.position.set(-0.04, 1.47, 0.1);
+            const eyeR = new THREE.Mesh(eyeGeo, matDark);
+            eyeR.position.set(0.04, 1.47, 0.1);
+            group.add(eyeL);
+            group.add(eyeR);
+
+            // 코
+            const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.04, 8), matSkin);
+            nose.position.set(0, 1.44, 0.12);
+            nose.rotation.x = Math.PI / 2;
+            group.add(nose);
+
+            // 헬멧 또는 모자
+            const capColor = isBatter ? 0xea1d2c : 0x0066b2;
+            const capMat = new THREE.MeshLambertMaterial({{ color: capColor }});
+            const cap = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+            cap.position.y = 1.46;
+            group.add(cap);
+
+            // 모자 챙
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.1), capMat);
+            visor.position.set(0, 1.5, 0.15);
+            visor.rotation.x = -0.1;
+            group.add(visor);
+
+            // 2. 상체 유니폼
             const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.55), matJersey);
             torso.position.y = 1.05;
             group.add(torso);
 
+            // 3. 팔 & 손/글러브
             const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45), matJersey);
             armR.position.set(-0.22, 1.1, 0);
             group.add(armR);
@@ -207,6 +298,17 @@ html_code = f"""
             armL.position.set(0.22, 1.1, 0);
             group.add(armL);
 
+            let glove = null;
+            if(!isBatter) {{
+                // 투수의 왼손 야구 글러브 착용
+                const gloveGeo = new THREE.BoxGeometry(0.12, 0.14, 0.1);
+                const gloveMat = new THREE.MeshLambertMaterial({{ color: 0x78350f }}); // 브라운 글러브
+                glove = new THREE.Mesh(gloveGeo, gloveMat);
+                glove.position.set(0.25, 0.9, 0.08);
+                group.add(glove);
+            }}
+
+            // 4. 하체
             const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.6), matPants);
             legR.position.set(-0.1, 0.4, 0);
             group.add(legR);
@@ -215,18 +317,18 @@ html_code = f"""
             legL.position.set(0.1, 0.4, 0);
             group.add(legL);
 
-            return {{ group, armR, armL }};
+            return {{ group, armR, armL, torso, glove }};
         }}
 
         const PITCHER_Z = -18.44;
 
-        // 투수 (삼성 유니폼)
-        const pitcherChar = createHumanCharacter(0x0066b2, 0xffffff);
+        // 투수 (삼성 유니폼 + 글러브)
+        const pitcherChar = createRealisticHuman(0x0066b2, 0xffffff, false);
         pitcherChar.group.position.set(0, 0, PITCHER_Z);
         scene.add(pitcherChar.group);
 
-        // 타자 (KIA 유니폼, 스트라이크존 우측 중앙 정렬)
-        const batterChar = createHumanCharacter(0xea1d2c, 0xffffff);
+        // 타자 (KIA 유니폼 + 얼굴 디테일 + 헬멧)
+        const batterChar = createRealisticHuman(0xea1d2c, 0xffffff, true);
         batterChar.group.position.set(0.5, 0, -0.2);
         batterChar.group.rotation.y = -Math.PI / 6;
         scene.add(batterChar.group);
@@ -245,16 +347,18 @@ html_code = f"""
         ball.position.set(0, 1.5, PITCHER_Z);
         scene.add(ball);
 
-        // --- 변수 및 로직 ---
+        // --- 구종 및 물리 상태 변수 ---
         let isWaiting = false;
         let isWindup = false;
         let isPitching = false;
         let isHitBallMoving = false;
+        
         let countdownVal = 5;
         let pitchStartTime = 0;
         let windupStartTime = 0;
         let hasSwung = false;
 
+        const pitchTypeStr = "{pitch_type}";
         const pitchSpeedVal = {pitch_speed};
         const flightTime = (18.44 / (pitchSpeedVal * 1000 / 3600)) * 1000;
         let ballVel = new THREE.Vector3();
@@ -290,9 +394,11 @@ html_code = f"""
             }}, 1000);
         }}
 
-        // 스페이스바 타격
+        // 키보드 키 이벤트: '1' 키로 투구 시작, '스페이스바'로 타격
         window.addEventListener('keydown', (e) => {{
-            if (e.code === 'Space' && (isPitching || isWindup) && !hasSwung) {{
+            if (e.key === '1') {{
+                startPitchSequence();
+            }} else if (e.code === 'Space' && (isPitching || isWindup) && !hasSwung) {{
                 hasSwung = true;
                 bat.rotation.y = -Math.PI / 1.1;
                 bat.position.x = 0.15;
@@ -331,7 +437,6 @@ html_code = f"""
             el.style.display = 'block';
         }}
 
-        // 전체화면 토글
         function toggleFullScreen() {{
             const elem = document.getElementById('game-container');
             if (!document.fullscreenElement) {{
@@ -341,14 +446,19 @@ html_code = f"""
             }}
         }}
 
-        // 애니메이션 루프
+        // --- 애니메이션 및 구종별 궤적 처리 루프 ---
         function animate() {{
             requestAnimationFrame(animate);
 
+            // 1. 투수 와인드업 애니메이션 (글러브 모았다가 양팔 휘두름)
             if (isWindup) {{
                 const elapsed = Date.now() - windupStartTime;
-                if (elapsed < 600) {{
-                    pitcherChar.armR.rotation.x = -Math.PI * (elapsed / 600);
+                if (elapsed < 700) {{
+                    const ratio = elapsed / 700;
+                    pitcherChar.armR.rotation.x = -Math.PI * ratio * 1.2; // 오른팔 크게 회전
+                    if(pitcherChar.glove) {{
+                        pitcherChar.glove.position.y = 0.9 + Math.sin(ratio * Math.PI) * 0.4; // 글러브 모으기 동작
+                    }}
                 }} else {{
                     isWindup = false;
                     isPitching = true;
@@ -358,12 +468,35 @@ html_code = f"""
                 }}
             }}
 
+            // 2. 구종별 세부 3D 비행 궤적 (직구, 슬라이더, 커브, 포크볼, 체인지업)
             if (isPitching) {{
                 const elapsed = Date.now() - pitchStartTime;
                 const progress = elapsed / flightTime;
 
                 if (progress <= 1.0) {{
+                    // Z축 기본 이동
                     ball.position.z = PITCHER_Z + (0 - PITCHER_Z) * progress;
+
+                    // 구종별 변화구 궤적 계산
+                    if (pitchTypeStr.includes("슬라이더")) {{
+                        // 슬라이더: 타자 가까이 와서 우타자 바깥쪽(오른쪽)으로 꺾임
+                        ball.position.x = Math.pow(progress, 2) * 0.75;
+                    }} else if (pitchTypeStr.includes("커브")) {{
+                        // 커브: 위로 떠올랐다가 타석 앞에서 커다란 포물선 그리며 큰 폭으로 종낙하
+                        ball.position.y = 1.5 + Math.sin(progress * Math.PI) * 0.8 - Math.pow(progress, 2) * 0.9;
+                    }} else if (pitchTypeStr.includes("포크볼")) {{
+                        // 포크볼: 직구처럼 오다가 홈플레이트 바로 앞에서 뚝 떨어짐
+                        const dropTrigger = Math.max(0, progress - 0.5);
+                        ball.position.y = 1.5 - Math.pow(dropTrigger * 2, 3) * 0.8;
+                    }} else if (pitchTypeStr.includes("체인지업")) {{
+                        // 체인지업: 좌타자 바깥쪽(왼쪽)으로 가라앉으며 꺾임
+                        ball.position.x = -Math.pow(progress, 2) * 0.45;
+                        ball.position.y = 1.5 - Math.sin(progress * Math.PI) * 0.3;
+                    }} else {{
+                        // 직구 (Four-Seam): 직선형 궤적
+                        ball.position.x = 0;
+                        ball.position.y = 1.5 - progress * 0.2;
+                    }}
                 }} else {{
                     if (!hasSwung) showResult("⚾ 루킹 스트라이크!", "#fbbf24");
                     isPitching = false;
@@ -371,6 +504,7 @@ html_code = f"""
                 }}
             }}
 
+            // 3. 타구 이동
             if (isHitBallMoving) {{
                 const dt = 0.016;
                 ball.position.x += ballVel.x * dt;
