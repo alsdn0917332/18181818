@@ -527,124 +527,219 @@ html_code = f"""
 </body>
 </html>
 """
-
-components.html(html_code, height=780)
+import pygame
 import random
-import math
+import sys
+
+# 1. 게임 초기화 및 설정
+pygame.init()
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("컴프야 스타일 야구 게임")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("malgungothic", 20)
+
+# 색상 정의
+GREEN = (34, 139, 34)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+BLACK = (0, 0, 0)
+GRAY = (200, 200, 200)
 
 class BaseballGame:
     def __init__(self):
-        # 1. 경기 상태 및 전광판 데이터 (1~9번 타자 안타 수, 스코어, 이닝)
         self.inning = 1
-        self.is_top = True  # True: 초(공격), False: 말(수비)
+        self.is_top = True
         self.score = {'HOME': 0, 'AWAY': 0}
-        self.batter_hits = [0] * 9  # 1번~9번 타자별 안타 개수
-        self.current_batter_idx = 0 # 현재 타순 (0~8)
+        self.batter_hits = [0] * 9
+        self.current_batter_idx = 0
         
-        # 볼 카운트
         self.strikes = 0
         self.balls = 0
         self.outs = 0
 
-    def get_pitch_location(self, is_pitcher_mode=False, target_x=0.0, target_y=0.0):
-        """ 로케이션 결정: 타자 모드일 땐 랜덤, 투수 모드일 땐 지정 위치 + 약간의 제구 오차 """
-        if not is_pitcher_mode:
-            # 타자 모드: 스트라이크 존 안팎으로 랜덤 로케이션 (-1.5 ~ 1.5)
-            loc_x = round(random.uniform(-1.2, 1.2), 2)
-            loc_y = round(random.uniform(-1.2, 1.2), 2)
-        else:
-            # 투수 모드: 내가 선택한 위치에 제구 오차(컨트롤) 반영
-            control_error_x = random.uniform(-0.15, 0.15)
-            control_error_y = random.uniform(-0.15, 0.15)
-            loc_x = round(target_x + control_error_x, 2)
-            loc_y = round(target_y + control_error_y, 2)
-        return loc_x, loc_y
-
-    def calculate_slider_trajectory(self, start_x, start_y, progress):
-        """ 슬라이더 궤적: 홈플레이트 근처(progress 0.6 이후)에서 우타자 바깥쪽으로 급격히 꺾임 """
-        # progress: 0.0(투수 손 끝) ~ 1.0(홈플레이트)
-        break_x = 0.0
-        break_y = 0.0
-        if progress > 0.5:
-            # 후반부에 횡경사와 하강 곡선이 강해짐
-            break_x = (progress - 0.5) ** 2 * 0.8  # 우타자 바깥쪽 휘어짐
-            break_y = -(progress - 0.5) ** 2 * 0.5 # 종으로 떨어짐
-            
-        current_x = start_x + break_x
-        current_y = start_y + break_y
-        return current_x, current_y
-
-    def judge_pitch(self, loc_x, loc_y, did_swing=False, swing_timing_diff=0.0):
-        """ 판정 로직: 스트라이크, 볼, 타격 판정 및 카운트 처리 """
-        # 스트라이크 존 범위 규정 (-0.8 ~ 0.8)
-        is_in_strike_zone = (-0.8 <= loc_x <= 0.8) and (-0.8 <= loc_y <= 0.8)
+        # 투구 관련 변수
+        self.is_pitching = False
+        self.progress = 0.0  # 0.0 (투수) ~ 1.0 (홈플레이트)
+        self.pitch_type = "SLIDER" # SLIDER, FASTBALL
+        self.target_x = 0.0 # -1.0 ~ 1.0
+        self.target_y = 0.0 # -1.0 ~ 1.0
+        self.ball_pos = [400, 150]
+        self.is_pitcher_mode = False # True: 투수모드, False: 타자모드
         
+        # 타격 관련
+        self.last_result = "대기 중..."
+
+    def start_pitch(self):
+        """투구 시작"""
+        if self.is_pitching:
+            return
+        
+        self.is_pitching = True
+        self.progress = 0.0
+        
+        # 로케이션 설정 (타자모드면 랜덤, 투수모드면 지정 좌표 + 오차)
+        if not self.is_pitcher_mode:
+            self.target_x = random.uniform(-1.2, 1.2)
+            self.target_y = random.uniform(-1.2, 1.2)
+        else:
+            self.target_x += random.uniform(-0.1, 0.1)
+            self.target_y += random.uniform(-0.1, 0.1)
+
+    def update_ball(self):
+        """프레임마다 공 위치 갱신 (슬라이더 궤적 반영)"""
+        if not self.is_pitching:
+            return
+
+        self.progress += 0.02 # 공 속도
+
+        # 기본 출발점(400, 150)에서 홈플레이트(400, 450)로 이동
+        base_x = 400 + (self.target_x * 80)
+        base_y = 150 + (self.progress * 300) + (self.target_y * 50)
+
+        # 슬라이더 궤적: progress 0.5 이후 바깥쪽으로 꺾임
+        break_x = 0
+        if self.pitch_type == "SLIDER" and self.progress > 0.5:
+            break_x = ((self.progress - 0.5) ** 2) * 150
+
+        self.ball_pos[0] = base_x + break_x
+        self.ball_pos[1] = base_y
+
+        # 공이 홈플레이트에 도달했을 때 (스윙 안 함 -> 루킹/볼 판정)
+        if self.progress >= 1.0:
+            self.judge_swing(did_swing=False)
+
+    def judge_swing(self, did_swing=True):
+        """타격 및 스트라이크/볼 판정"""
+        if not self.is_pitching:
+            return
+
+        self.is_pitching = False
+        is_strike_zone = (-1.0 <= self.target_x <= 1.0) and (-1.0 <= self.target_y <= 1.0)
+
         if not did_swing:
-            # 스윙 안 함 -> 로케이션에 따라 스트라이크 / 볼
-            if is_in_strike_zone:
+            if is_strike_zone:
                 self.strikes += 1
-                result = "STRIKE (루킹)"
+                self.last_result = "스트라이크! (루킹)"
             else:
                 self.balls += 1
-                result = "BALL"
+                self.last_result = "볼!"
         else:
-            # 스윙 함 -> 타이밍 오차(swing_timing_diff)로 결과 결정
-            if swing_timing_diff < 0.05:
-                result = "HOMERUN"
+            # 타이밍 판정 (홈플레이트 도달 시점인 progress 0.95~1.05 사이가 적시)
+            timing_diff = abs(1.0 - self.progress)
+
+            if timing_diff < 0.08:
+                self.last_result = "홈런!!"
                 self.batter_hits[self.current_batter_idx] += 1
                 self.score['AWAY' if self.is_top else 'HOME'] += 1
                 self.reset_count()
-            elif swing_timing_diff < 0.18:
-                result = "HIT"
+            elif timing_diff < 0.20:
+                self.last_result = "안타!"
                 self.batter_hits[self.current_batter_idx] += 1
                 self.reset_count()
-            elif swing_timing_diff < 0.35:
-                result = "OUT (땅볼/플라이)"
+            elif timing_diff < 0.35:
+                self.last_result = "아웃 (땅볼/플라이)"
                 self.outs += 1
                 self.reset_count()
             else:
-                # 헛스윙
                 self.strikes += 1
-                result = "STRIKE (헛스윙)"
+                self.last_result = "헛스윙 스트라이크!"
 
-        # 카운트 누적 판정 (3아웃, 4볼, 3스트라이크)
         self.check_rules()
-        return result
 
     def check_rules(self):
-        """ 볼카운트 및 아웃/이닝 교대 규칙 적용 """
+        """3스트라이크, 4볼, 3아웃 규칙"""
         if self.strikes >= 3:
-            print(">> 삼진 아웃!")
             self.outs += 1
+            self.last_result = "삼진 아웃!"
             self.reset_count()
-            
-        if self.balls >= 4:
-            print(">> 볼넷 (사구) 출루!")
+        elif self.balls >= 4:
+            self.last_result = "볼넷 (출루)"
             self.reset_count()
-            
+
         if self.outs >= 3:
-            print("\n====================")
-            print(f">> 3아웃! {self.inning}이닝 {'초' if self.is_top else '말'} 종료, 이닝 교대합니다.")
-            print("====================\n")
             self.outs = 0
             self.reset_count()
             if not self.is_top:
                 self.inning += 1
             self.is_top = not self.is_top
+            self.last_result = f"3아웃! {self.inning}이닝으로 교대합니다."
 
     def reset_count(self):
-        """ 타석 종료 시 타자 교체 및 볼카운트 리셋 """
         self.strikes = 0
         self.balls = 0
         self.current_batter_idx = (self.current_batter_idx + 1) % 9
 
-    def display_scoreboard(self):
-        """ 컴프야 V26 스타일 전광판 출력 """
-        half = "초" if self.is_top else "말"
-        print("┌──────────────────────────────────────────────────────────┐")
-        print(f"│ SCOREBOARD | {self.inning}회{half}  | AWAY: {self.score['AWAY']}  vs  HOME: {self.score['HOME']}")
-        print(f"│ COUNT      | S: {self.strikes}  B: {self.balls}  O: {self.outs}")
-        print("├──────────────────────────────────────────────────────────┤")
-        print(f"│ 현재 타순  | {self.current_batter_idx + 1}번 타자")
-        print("│ 타자별 안타 | " + " ".join([f"[{i+1}번:{h}]" for i, h in enumerate(self.batter_hits)]))
-        print("└──────────────────────────────────────────────────────────┘")
+# 게임 객체 생성
+game = BaseballGame()
+
+# 2. 메인 게임 루프
+running = True
+while running:
+    clock.tick(60)
+    screen.fill(GREEN)
+
+    # 이벤트 처리
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+            
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:  # 스페이스바: 투구 시작 / 스윙
+                if not game.is_pitching:
+                    game.start_pitch()
+                else:
+                    game.judge_swing(did_swing=True)
+            
+            # 모드 전환 (M 키)
+            if event.key == pygame.K_m:
+                game.is_pitcher_mode = not game.is_pitcher_mode
+                
+            # 투수 모드일 때 방향키로 로케이션 조절
+            if game.is_pitcher_mode and not game.is_pitching:
+                if event.key == pygame.K_LEFT: game.target_x -= 0.3
+                if event.key == pygame.K_RIGHT: game.target_x += 0.3
+                if event.key == pygame.K_UP: game.target_y -= 0.3
+                if event.key == pygame.K_DOWN: game.target_y += 0.3
+
+    # 공 위치 업데이트
+    game.update_ball()
+
+    # --- 화면 그리기 ---
+    # 스트라이크 존
+    pygame.draw.rect(screen, WHITE, (320, 370, 160, 160), 2)
+    
+    # 공
+    if game.is_pitching:
+        pygame.draw.circle(screen, WHITE, (int(game.ball_pos[0]), int(game.ball_pos[1])), 10)
+
+    # 투수 모드 목표 지점 표시
+    if game.is_pitcher_mode:
+        target_draw_x = int(400 + (game.target_x * 80))
+        target_draw_y = int(450 + (game.target_y * 50))
+        pygame.draw.circle(screen, RED, (target_draw_x, target_draw_y), 6, 1)
+
+    # UI 및 전광판 출력
+    mode_text = "투수 모드 (방향키: 로케이션, SPACE: 투구)" if game.is_pitcher_mode else "타자 모드 (SPACE: 투구 및 스윙)"
+    half_text = "초" if game.is_top else "말"
+    
+    txt_mode = font.render(f"모드: {mode_text} [M키로 전환]", True, WHITE)
+    txt_score = font.render(f"전광판: {game.inning}회{half_text} | AWAY: {game.score['AWAY']} vs HOME: {game.score['HOME']}", True, WHITE)
+    txt_count = font.render(f"S: {game.strikes} | B: {game.balls} | O: {game.outs}", True, WHITE)
+    txt_batter = font.render(f"현재 타순: {game.current_batter_idx + 1}번 타자 | 결과: {game.last_result}", True, WHITE)
+    
+    # 1~9번 타자 안타 수
+    hits_str = " ".join([f"[{i+1}번:{h}]" for i, h in enumerate(game.batter_hits)])
+    txt_hits = font.render(f"타자별 안타: {hits_str}", True, WHITE)
+
+    screen.blit(txt_mode, (20, 20))
+    screen.blit(txt_score, (20, 50))
+    screen.blit(txt_count, (20, 80))
+    screen.blit(txt_batter, (20, 110))
+    screen.blit(txt_hits, (20, 140))
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
