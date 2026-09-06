@@ -534,11 +534,15 @@ import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
 import random
+import streamlit as st
+import numpy as np
+import plotly.graph_objects as go
+import random
 
 # 페이지 기본 설정
 st.set_page_config(page_title="KBO 야구 게임", layout="wide")
 
-# 1. 세이트 상태(Session State) 초기화 (앱이 새로고침되어도 게임 상태 유지)
+# 1. 세션 상태(Session State) 초기화
 if 'inning' not in st.session_state:
     st.session_state.inning = 1
     st.session_state.is_top = True
@@ -559,13 +563,12 @@ if is_pitcher_mode:
     target_x = st.sidebar.slider("좌우 로케이션 (X)", -1.5, 1.5, 0.0, 0.1)
     target_y = st.sidebar.slider("상하 로케이션 (Y)", -1.5, 1.5, 0.0, 0.1)
 else:
-    # 타자 모드: 시스템이 알아서 랜덤 지정
+    # 타자 모드: 시스템이 오차 포함 랜덤 지정
     target_x = round(random.uniform(-1.2, 1.2), 2)
     target_y = round(random.uniform(-1.2, 1.2), 2)
 
 # 타격 로직 함수
 def process_pitch(did_swing, timing):
-    # 제구 오차 약간 추가
     final_x = target_x + random.uniform(-0.1, 0.1)
     final_y = target_y + random.uniform(-0.1, 0.1)
     
@@ -580,7 +583,6 @@ def process_pitch(did_swing, timing):
             st.session_state.balls += 1
             st.session_state.last_result = "볼!"
     else:
-        # timing: -0.5(빠름) ~ 0.5(느림), 0.0이 정타
         abs_timing = abs(timing)
         if abs_timing < 0.1:
             st.session_state.last_result = "홈런!!"
@@ -645,12 +647,12 @@ st.caption(f"📊 타자별 안타 현황: {hits_display}")
 # 액션 영역
 col_action1, col_action2 = st.columns(2)
 with col_action1:
-    timing_val = st.slider("스윙 타이밍 맞추기 (-0.5: 빠름, 0.0: 정타, 0.5: 느림)", -0.5, 0.5, 0.0, 0.05)
+    timing_val = st.slider("스윙 타이밍 (-0.5: 빠름, 0.0: 정타, 0.5: 느림)", -0.5, 0.5, 0.0, 0.05)
 with col_action2:
     st.write(" ")
     st.write(" ")
     btn_swing = st.button("⚾ 스윙 하기!", use_container_width=True)
-    btn_look = st.button("👀 지켜보기 (지켜보기/루킹)", use_container_width=True)
+    btn_look = st.button("👀 지켜보기", use_container_width=True)
 
 # 액션 처리
 pitched_x, pitched_y = target_x, target_y
@@ -662,29 +664,25 @@ elif btn_look:
 st.subheader(f"판정 결과: {st.session_state.last_result}")
 
 # --- Plotly 기반 3D 투구 궤적 시각화 ---
-# 공의 궤적 계산
-z_range = np.linspace(18.4, 0, 30) # 투수판(18.4m) ~ 홈플레이트(0m)
+z_range = np.linspace(18.4, 0, 30)
 x_path = []
 y_path = []
 
 for z in z_range:
     progress = (18.4 - z) / 18.4
-    
-    # 슬라이더 궤적: progress 0.5 이후 오른쪽으로 휘어짐
     break_x = 0
     if "슬라이더" in pitch_type and progress > 0.5:
         break_x = ((progress - 0.5) ** 2) * 1.2
         
     curr_x = (pitched_x * progress) + break_x
-    curr_y = (pitched_y * progress) + (1.0 * (1 - progress)) # 투수 손 위치 고도 반영
+    curr_y = (pitched_y * progress) + (1.0 * (1 - progress))
     
     x_path.append(curr_x)
     y_path.append(curr_y)
 
-# 3D 차트 그리기
 fig = go.Figure()
 
-# 1. 스트라이크 존 규정 박스
+# 1. 스트라이크 존
 fig.add_trace(go.Scatter3d(
     x=[-0.8, 0.8, 0.8, -0.8, -0.8, -0.8, 0.8, 0.8, -0.8, -0.8],
     y=[-0.8, -0.8, 0.8, 0.8, -0.8, -0.8, -0.8, 0.8, 0.8, -0.8],
@@ -694,7 +692,7 @@ fig.add_trace(go.Scatter3d(
     name='스트라이크 존'
 ))
 
-# 2. 공의 투구 궤적
+# 2. 궤적
 fig.add_trace(go.Scatter3d(
     x=x_path, y=y_path, z=z_range,
     mode='lines+markers',
@@ -703,7 +701,7 @@ fig.add_trace(go.Scatter3d(
     name='투구 궤적'
 ))
 
-# 3. 포수 미트 위치 (최종 도달점)
+# 3. 도달점
 fig.add_trace(go.Scatter3d(
     x=[pitched_x], y=[pitched_y], z=[0],
     mode='markers',
@@ -715,12 +713,11 @@ fig.update_layout(
     scene=dict(
         xaxis=dict(title='X (좌/우)', range=[-2, 2]),
         yaxis=dict(title='Y (상/하)', range=[-2, 2]),
-        zaxis=dict(title='Z (거리: 투수 -> 홈)', range=[0, 20]),
+        zaxis=dict(title='Z (거리)', range=[0, 20]),
         aspectratio=dict(x=1, y=1, z=2)
     ),
     margin=dict(l=0, r=0, b=0, t=0),
     height=500
 )
 
-st.plotly_chart(fig, use_container_width=True) # Streamlit 차트 출력
-#
+st.plotly_chart(fig, use_container_width=True)
