@@ -529,3 +529,122 @@ html_code = f"""
 """
 
 components.html(html_code, height=780)
+import random
+import math
+
+class BaseballGame:
+    def __init__(self):
+        # 1. 경기 상태 및 전광판 데이터 (1~9번 타자 안타 수, 스코어, 이닝)
+        self.inning = 1
+        self.is_top = True  # True: 초(공격), False: 말(수비)
+        self.score = {'HOME': 0, 'AWAY': 0}
+        self.batter_hits = [0] * 9  # 1번~9번 타자별 안타 개수
+        self.current_batter_idx = 0 # 현재 타순 (0~8)
+        
+        # 볼 카운트
+        self.strikes = 0
+        self.balls = 0
+        self.outs = 0
+
+    def get_pitch_location(self, is_pitcher_mode=False, target_x=0.0, target_y=0.0):
+        """ 로케이션 결정: 타자 모드일 땐 랜덤, 투수 모드일 땐 지정 위치 + 약간의 제구 오차 """
+        if not is_pitcher_mode:
+            # 타자 모드: 스트라이크 존 안팎으로 랜덤 로케이션 (-1.5 ~ 1.5)
+            loc_x = round(random.uniform(-1.2, 1.2), 2)
+            loc_y = round(random.uniform(-1.2, 1.2), 2)
+        else:
+            # 투수 모드: 내가 선택한 위치에 제구 오차(컨트롤) 반영
+            control_error_x = random.uniform(-0.15, 0.15)
+            control_error_y = random.uniform(-0.15, 0.15)
+            loc_x = round(target_x + control_error_x, 2)
+            loc_y = round(target_y + control_error_y, 2)
+        return loc_x, loc_y
+
+    def calculate_slider_trajectory(self, start_x, start_y, progress):
+        """ 슬라이더 궤적: 홈플레이트 근처(progress 0.6 이후)에서 우타자 바깥쪽으로 급격히 꺾임 """
+        # progress: 0.0(투수 손 끝) ~ 1.0(홈플레이트)
+        break_x = 0.0
+        break_y = 0.0
+        if progress > 0.5:
+            # 후반부에 횡경사와 하강 곡선이 강해짐
+            break_x = (progress - 0.5) ** 2 * 0.8  # 우타자 바깥쪽 휘어짐
+            break_y = -(progress - 0.5) ** 2 * 0.5 # 종으로 떨어짐
+            
+        current_x = start_x + break_x
+        current_y = start_y + break_y
+        return current_x, current_y
+
+    def judge_pitch(self, loc_x, loc_y, did_swing=False, swing_timing_diff=0.0):
+        """ 판정 로직: 스트라이크, 볼, 타격 판정 및 카운트 처리 """
+        # 스트라이크 존 범위 규정 (-0.8 ~ 0.8)
+        is_in_strike_zone = (-0.8 <= loc_x <= 0.8) and (-0.8 <= loc_y <= 0.8)
+        
+        if not did_swing:
+            # 스윙 안 함 -> 로케이션에 따라 스트라이크 / 볼
+            if is_in_strike_zone:
+                self.strikes += 1
+                result = "STRIKE (루킹)"
+            else:
+                self.balls += 1
+                result = "BALL"
+        else:
+            # 스윙 함 -> 타이밍 오차(swing_timing_diff)로 결과 결정
+            if swing_timing_diff < 0.05:
+                result = "HOMERUN"
+                self.batter_hits[self.current_batter_idx] += 1
+                self.score['AWAY' if self.is_top else 'HOME'] += 1
+                self.reset_count()
+            elif swing_timing_diff < 0.18:
+                result = "HIT"
+                self.batter_hits[self.current_batter_idx] += 1
+                self.reset_count()
+            elif swing_timing_diff < 0.35:
+                result = "OUT (땅볼/플라이)"
+                self.outs += 1
+                self.reset_count()
+            else:
+                # 헛스윙
+                self.strikes += 1
+                result = "STRIKE (헛스윙)"
+
+        # 카운트 누적 판정 (3아웃, 4볼, 3스트라이크)
+        self.check_rules()
+        return result
+
+    def check_rules(self):
+        """ 볼카운트 및 아웃/이닝 교대 규칙 적용 """
+        if self.strikes >= 3:
+            print(">> 삼진 아웃!")
+            self.outs += 1
+            self.reset_count()
+            
+        if self.balls >= 4:
+            print(">> 볼넷 (사구) 출루!")
+            self.reset_count()
+            
+        if self.outs >= 3:
+            print("\n====================")
+            print(f">> 3아웃! {self.inning}이닝 {'초' if self.is_top else '말'} 종료, 이닝 교대합니다.")
+            print("====================\n")
+            self.outs = 0
+            self.reset_count()
+            if not self.is_top:
+                self.inning += 1
+            self.is_top = not self.is_top
+
+    def reset_count(self):
+        """ 타석 종료 시 타자 교체 및 볼카운트 리셋 """
+        self.strikes = 0
+        self.balls = 0
+        self.current_batter_idx = (self.current_batter_idx + 1) % 9
+
+    def display_scoreboard(self):
+        """ 컴프야 V26 스타일 전광판 출력 """
+        half = "초" if self.is_top else "말"
+        print("┌──────────────────────────────────────────────────────────┐")
+        print(f"│ SCOREBOARD | {self.inning}회{half}  | AWAY: {self.score['AWAY']}  vs  HOME: {self.score['HOME']}")
+        print(f"│ COUNT      | S: {self.strikes}  B: {self.balls}  O: {self.outs}")
+        print("├──────────────────────────────────────────────────────────┤")
+        print(f"│ 현재 타순  | {self.current_batter_idx + 1}번 타자")
+        print("│ 타자별 안타 | " + " ".join([f"[{i+1}번:{h}]" for i, h in enumerate(self.batter_hits)]))
+        print("└──────────────────────────────────────────────────────────┘")
