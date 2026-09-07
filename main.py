@@ -529,3 +529,16 @@ html_code = f"""
 """
 
 components.html(html_code, height=780)
+# ==========================================
+# [맨 밑에 추가할 타격 효과음 재생 코드]
+# ==========================================
+import streamlit.components.v1 as components
+
+# 타격 판정 결과에 '깡'이나 '홈런', '안타', '아웃'이 들어있을 때 소리 재생
+if 'last_result' in st.session_state and any(keyword in st.session_state.last_result for keyword in ["깡", "홈런", "안타", "아웃"]):
+    sound_html = """
+    <audio autoplay style="display:none;">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2138/2138-preview.mp3" type="audio/mpeg">
+    </audio>
+    """
+    components.html(sound_html, height=0)
