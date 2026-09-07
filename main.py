@@ -527,4 +527,5 @@ html_code = f"""
 </body>
 </html>
 """
-# ==========================================
+
+components.html(html_code, height=780)
