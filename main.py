@@ -528,20 +528,27 @@ html_code = f"""
 </html>
 """
 # ==========================================
-# [맨 밑에 추가할 유튜브 효과음 코드]
+# [맨 밑에 추가할 오디오 전용 재생 코드]
 # ==========================================
 import streamlit.components.v1 as components
 
-# 원하는 YouTube 동영상 ID
+# 이미지의 YouTube 동영상 ID
 YOUTUBE_VIDEO_ID = "kdtmY_4pd2E"
 
-# 타격 결과 발생 시 유튜브 음원 자동 재생
+# 경기장 레이아웃에 영향을 주지 않도록 독립된 플레이스홀더 생성
+sound_container = st.empty()
+
 if any(keyword in st.session_state.get('last_result', '') for keyword in ["깡", "홈런", "안타", "아웃"]):
-    yt_audio_html = f"""
-    <iframe width="0" height="0" 
-            src="https://www.youtube.com/embed/{YOUTUBE_VIDEO_ID}?autoplay=1&controls=0&start=0" 
-            frameborder="0" 
-            allow="autoplay">
-    </iframe>
-    """
-    components.html(yt_audio_html, height=0)
+    with sound_container:
+        components.html(
+            f"""
+            <div style="display:none;">
+                <iframe width="0" height="0" 
+                        src="https://www.youtube-nocookie.com/embed/{YOUTUBE_VIDEO_ID}?autoplay=1&controls=0" 
+                        allow="autoplay">
+                </iframe>
+            </div>
+            """,
+            height=0,
+            width=0
+        )
